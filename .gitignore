@@ -1,1 +1,9 @@
 vendor
+.idea/.gitignore
+.idea/blossom-test.iml
+.idea/composerJson.xml
+.idea/misc.xml
+.idea/modules.xml
+.idea/php.xml
+.idea/symfony2.xml
+.idea/vcs.xml
