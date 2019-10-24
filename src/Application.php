@@ -28,11 +28,6 @@ class Application
      */
 
     /**
-     * @var $request Symfony\Component\HttpFoundation\Request
-     */
-    private $request;
-
-    /**
      * @var $response Symfony\Component\HttpFoundation\Response
      */
     private $response;
@@ -60,15 +55,6 @@ class Application
         $this->accepted_upload_type = ['dropbox', 's3', 'ftp'];
         $this->config = $config;
 
-        $this->request = new Request(
-            $_GET,
-            $_POST,
-            [],
-            $_COOKIE,
-            $_FILES,
-            $_SERVER
-        );
-
         $this->response = new Response(
             'Content',
             $this->http_status,
@@ -88,27 +74,37 @@ class Application
      */
     public function handleRequest(Request $request): Response
     {
-        $request_method = $this->request->getMethod();
-        $post_data = [];
+        $request_method = $request->getMethod();
+        $response_content = [];
         $url = "";
         try {
             switch ($request_method) {
                 case "POST":
                     // check if there are no request parameters
-                    if (empty($_POST)) {
+
+                    // get values of request parameters
+                    $upload = $request->get('upload');
+                    $formats = $request->get('formats');
+                    $file = $request->files->get('file');
+
+                    // check if file is not empty
+                    if (!$file || $file == NULL) {
+                        return $this->response->setContent(json_encode(array("error" => "File not found")))
+                            ->setStatusCode(Response::HTTP_BAD_REQUEST);
+                    }
+
+                    // check if file is not empty
+                    if (empty($upload) || !in_array($upload, $this->accepted_upload_type)) {
                         return $this->response->setStatusCode(Response::HTTP_BAD_REQUEST);
                     }
 
-                    // get values of request parameters
-                    $upload = $this->request->request->get('upload');
-                    $formats = $this->request->request->get('formats');
-                    $file = $this->request->files->get('file');
+                    // add format key to response object
+                    if (!empty($formats)) {
+                        $response_content["formats"] = $formats;
+                    }
                     // upload file
                     $url = $this->handleUpload($upload, $formats, $file);
-                    // check if file is not empty
-                    if (empty($file)) {
-                        return $this->response->setStatusCode(Response::HTTP_BAD_REQUEST);
-                    }
+
                     $this->response->setStatusCode(Response::HTTP_OK);
                     break;
                 case "GET":
@@ -119,14 +115,14 @@ class Application
                     break;
             }
             // define the response content
-            $response_content = [
-                "url" => $url
-            ];
+            $response_content = $url;
+
         } catch (\Exception $exception) {
             $response_content = [
                 "url" => $url,
                 "exception" => $exception->getMessage()
             ];
+            $this->response->setStatusCode(Response::HTTP_BAD_REQUEST);
         }
         // set response character set as UTF-8 always
         $this->response->setCharset('UTF-8');
@@ -142,35 +138,41 @@ class Application
      * @param array $format
      * @param SplFileInfo $file
      */
-    private function handleUpload(string $upload = '', array $format = [], SplFileInfo $file)
+    private function handleUpload(string $upload = '', array $format = [], $file)
     {
-        if (!empty($format))
-        {
+        $formatUrls = [];
+        if (!empty($format)) {
             foreach ($format as $key => $value) {
                 $convertedFile = $this->handleFormatConversion($value, $file);
-                $url = $this->uploadFile($upload, $convertedFile);
+                $formatUrls[$value] = empty($convertedFile["url"]) ? $this->uploadFile($upload, $convertedFile["file"]) : $convertedFile["url"];
             }
-        }else{
-            $url = $this->uploadFile($upload, $file);
         }
-
-        return $url;
+        $url = $this->uploadFile($upload, $file);
+        $data["url"] = $url;
+        if(!empty($formatUrls))
+        {
+            $data['formats'] = $formatUrls;
+        }
+        return $data;
     }
 
     private function uploadFile($location, $convertedFile)
     {
         switch ($location) {
             case "dropbox":
-                $dropbox = new DropboxClient($this->config['dropbox']['accessKey'], $this->config['dropbox']['secretToken'], $this->config['dropbox']['container']);
+                $dropbox = new DropboxClient($this->config['dropbox']['access_key'], $this->config['dropbox']['secret_token'], $this->config['dropbox']['container']);
                 $url = $dropbox->upload($convertedFile);
                 break;
             case "s3":
-                $s3 = new \S3Stub\Client($this->config['s3']['accessKeyId'], $this->config['s3']['secret_access_key']);
-                $url = $s3->send($convertedFile, $this->config['s3']['bucketname']);
+                $s3 = new \S3Stub\Client($this->config['s3']['access_key_id'], $this->config['s3']['secret_access_key']);
+                $fileObj = $s3->send($convertedFile, $this->config['s3']['bucketname']);
+                $url = $fileObj->getPublicUrl();
                 break;
             case "ftp":
                 $ftp = new FTPUploader();
-                $url = $ftp->uploadFile($convertedFile, $this->config['ftp']['hostname'], $this->config['ftp']['username'], $this->config['ftp']['password'], $this->config['ftp']['destination']);
+                $ftp->uploadFile($convertedFile, $this->config['ftp']['hostname'], $this->config['ftp']['username'], $this->config['ftp']['password'], $this->config['ftp']['destination']);
+                $url = "ftp://" . $this->config['ftp']['hostname']
+                    . "/" . $this->config['ftp']['destination'] . "/" . $convertedFile->getFileName();
                 break;
         }
         return $url;
@@ -187,10 +189,13 @@ class Application
         $convertedFile = $file;
         if ($format == 'mp4') {
             $convertedFile = new FFMPEG();
-            return $convertedFile->convert($file);
+            $fileObj = $convertedFile->convert($file);
+            return ["file" => $fileObj, "url" => ""];
+        } elseif(!in_array($format, $this->accepted_format)) {
+            throw new \Exception( "Invalid file conversion format");
         } else {
             $convertedFile = new Client($this->config['encoding.com']['app_id'], $this->config['encoding.com']['access_token']);
-            return $convertedFile->encodeFile($file, $format);
+            return ["file" => $file, "url" => $convertedFile->encodeFile($file, $format)];
         }
 
     }
