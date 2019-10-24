@@ -71,14 +71,42 @@ class Application
      */
     public function handleRequest(Request $request): Response
     {
-        $content = [
-            "message" => "",
-            "error" => "",
-            "success" => true,
-            "url" => "string"
+        $request_method = $this->request->getMethod();
+        $post_data = [];
+
+        switch ($request_method) {
+            case "POST":
+                // check if there are no request parameters
+                if (empty($_POST)) {
+                    $this->response->setStatusCode(Response::HTTP_BAD_REQUEST);
+                    break;
+                }
+
+                // get values of request parameters
+                $upload = $this->request->request->get('upload');
+                $formats = $this->request->request->get('formats');
+                $file = $this->request->files->get('file');
+
+                
+                $this->response->setStatusCode(Response::HTTP_OK);
+                break;
+            case "GET":
+                $this->response->setStatusCode(Response::HTTP_METHOD_NOT_ALLOWED);
+                break;
+            default:
+                $this->response->setStatusCode(Response::HTTP_BAD_REQUEST);
+                break;
+        }
+        // define the response content
+        $response_content = [
+            "url" => ""
         ];
+
+        // set response character set as UTF-8 always
         $this->response->setCharset('UTF-8');
-        $this->response->setContent(json_encode($content));
+        // set response content
+        $this->response->setContent(json_encode($response_content));
+
         return $this->response;
     }
 }
