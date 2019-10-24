@@ -1,0 +1,22 @@
+{
+    "name": "blossom/backend-developer-test",
+    "description": "Recruitment test for a backend developer",
+    "require": {
+        "php": "~7.0",
+        "symfony/http-foundation": "~3.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^6.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Blossom\\BackendDeveloperTest\\Tests\\": "tests",
+            "Blossom\\BackendDeveloperTest\\": "src",
+            "EncodingStub\\": "stubs/Encoding",
+            "DropboxStub\\": "stubs/Dropbox",
+            "S3Stub\\": "stubs/S3",
+            "FTPStub\\": "stubs/FTP",
+            "FFMPEGStub\\": "stubs/FFMPEG"
+        }
+    }
+}
