@@ -20,27 +20,28 @@ use Symfony\Component\HttpFoundation\Response;
 class Application
 {
     /**
-     * By default the constructor takes a single argument which is a config array.
-     *
-     * You can handle it however you want.
-     *
-     * @param array $config Application config.
-     */
-
-    /**
-     * @var $response Symfony\Component\HttpFoundation\Response
+     * @var Symfony\Component\HttpFoundation\Response $response
      */
     private $response;
 
     /**
-     * @var $http_status
+     * @var int $http_status
      */
     private $http_status;
 
+    /**
+     * @var array $accepted_format
+     */
     private $accepted_format;
 
+    /**
+     * @var array $accepted_upload_type
+     */
     private $accepted_upload_type;
 
+    /**
+     * @var array $config
+     */
     private $config;
 
     /**
@@ -55,6 +56,7 @@ class Application
         $this->accepted_upload_type = ['dropbox', 's3', 'ftp'];
         $this->config = $config;
 
+        // set class response object
         $this->response = new Response(
             'Content',
             $this->http_status,
@@ -74,14 +76,14 @@ class Application
      */
     public function handleRequest(Request $request): Response
     {
+        // set initial values
         $request_method = $request->getMethod();
         $response_content = [];
         $url = "";
+        // start handle request from here
         try {
             switch ($request_method) {
                 case "POST":
-                    // check if there are no request parameters
-
                     // get values of request parameters
                     $upload = $request->get('upload');
                     $formats = $request->get('formats');
@@ -102,15 +104,15 @@ class Application
                     if (!empty($formats)) {
                         $response_content["formats"] = $formats;
                     }
-                    // upload file
+                    // initiate upload file
                     $url = $this->handleUpload($upload, $formats, $file);
 
                     $this->response->setStatusCode(Response::HTTP_OK);
                     break;
-                case "GET":
+                case "GET": // if request method type is GET
                     $this->response->setStatusCode(Response::HTTP_METHOD_NOT_ALLOWED);
                     break;
-                default:
+                default: // if request method type is neither GET nor POST
                     $this->response->setStatusCode(Response::HTTP_BAD_REQUEST);
                     break;
             }
@@ -141,21 +143,33 @@ class Application
     private function handleUpload(string $upload = '', array $format = [], $file)
     {
         $formatUrls = [];
+        //check if conversion formats are provided
         if (!empty($format)) {
+            // convert all the file in required format and add format urls to response
             foreach ($format as $key => $value) {
                 $convertedFile = $this->handleFormatConversion($value, $file);
                 $formatUrls[$value] = empty($convertedFile["url"]) ? $this->uploadFile($upload, $convertedFile["file"]) : $convertedFile["url"];
             }
         }
+        // upload original file
         $url = $this->uploadFile($upload, $file);
+
+        // prepare response data
         $data["url"] = $url;
-        if(!empty($formatUrls))
-        {
+        if (!empty($formatUrls)) {
             $data['formats'] = $formatUrls;
         }
+
         return $data;
     }
 
+
+    /**
+     * Upload file to required location and return upload url
+     * @param $location
+     * @param $convertedFile
+     * @return string
+     */
     private function uploadFile($location, $convertedFile)
     {
         switch ($location) {
@@ -191,8 +205,8 @@ class Application
             $convertedFile = new FFMPEG();
             $fileObj = $convertedFile->convert($file);
             return ["file" => $fileObj, "url" => ""];
-        } elseif(!in_array($format, $this->accepted_format)) {
-            throw new \Exception( "Invalid file conversion format");
+        } elseif (!in_array($format, $this->accepted_format)) {
+            throw new \Exception("Invalid file conversion format");
         } else {
             $convertedFile = new Client($this->config['encoding.com']['app_id'], $this->config['encoding.com']['access_token']);
             return ["file" => $file, "url" => $convertedFile->encodeFile($file, $format)];
